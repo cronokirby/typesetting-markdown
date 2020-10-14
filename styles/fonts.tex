@@ -1,3 +1,12 @@
-\setupbodyfontenvironment[default][em=italic]
-\definefontfeature[default][default][itlc=yes]
+\usetypescriptfile[asana]
 
+\definefontfeature[default][default][onum=yes]
+
+\definefontfamily[me][serif][Noto Serif]
+\definefontfamily[me][sans] [TeX Gyre Heros]
+\definefontfamily[me][mono] [JetBrains Mono]
+\definefontfamily[me][math] [default]
+
+\definebodyfontenvironment [10pt] [a=16pt]
+
+\setupbodyfont[me,10pt]
