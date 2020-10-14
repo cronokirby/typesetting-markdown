@@ -62,13 +62,13 @@ execute_build() {
   cat ./??.md > ${FILE_CAT}
 
   $log "Generate ${FILE_TEX}"
-  pandoc --standalone --to context ${FILE_CAT} > "${FILE_TEX}"
+  pandoc --to context ${FILE_CAT} > "${FILE_TEX}"
 
   $log "Generate ${FILE_PDF}"
-  context --nonstopmode --batchmode --purgeall --path=build,styles "${FILE_TEX}" >/dev/null 2>&1
+  context --nonstopmode --batchmode --purgeall --path=build,styles "${FILE_MAIN_PREFIX}" >/dev/null 2>&1
 
-  $log "Rename ${FILE_PDF} to ${FILE_DST}"
-  mv "${FILE_PDF}" "${FILE_DST}"
+  $log "Rename ${FILE_MAIN_PREFIX}.pdf to ${FILE_DST}"
+  mv "${FILE_MAIN_PREFIX}.pdf" "${FILE_DST}"
 }
 
 # Check for required commands.
