@@ -2,6 +2,14 @@
 import argparse
 from enum import Enum
 import logging
+from shutil import which
+
+
+REQUIREMENTS = [
+    ('pandoc', 'https://www.pandoc.org'),
+    ('context', 'https://wiki.contextgarden.net'),
+    ('gs', 'https://www.ghostscript.com')
+]
 
 
 def setup_logger(verbose):
@@ -37,6 +45,18 @@ def parse_args():
     return parser.parse_args()
 
 
+def command_exists(name):
+    return which(name) is not None
+
+
+def check_requirements():
+    for name, url in REQUIREMENTS:
+        if not command_exists(name):
+            log_error(f'Missing required program: {name}\t{url}')
+            return False
+    return True
+
+
 def main():
     '''
     The main body of our script.
@@ -46,10 +66,13 @@ def main():
         2. Use Arguments
     '''
     args = parse_args()
+
     setup_logger(args.verbose)
-    log_error('Uh oh')
-    log_warn('I think something bad is happening')
-    log_info('Just for your information, it\'s ok')
+
+    if not check_requirements():
+        exit(-1)
+
+    log_info('Program requirements satisfied!')
 
 
 if __name__ == '__main__':
