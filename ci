@@ -47,31 +47,28 @@ execute_tasks() {
 }
 
 execute_build() {
-  local -r DIR_TEMP="$(mktemp tmp.XXXXXXXXXX -ut)"
-  local -r FILE_PREFIX="body"
+  local -r DIR_BUILD="build"
+  mkdir -p "${DIR_BUILD}"
 
-  local -r FILE_SRC="${DIR_TEMP}/${FILE_PREFIX}.md"
-  local -r FILE_TEX="${FILE_PREFIX}.tex"
-  local -r FILE_PDF="${FILE_PREFIX}.pdf"
-  local -r FILE_DST="output.pdf"
+  local -r FILE_MAIN_PREFIX="main"
+  local -r FILE_BODY_PREFIX="${DIR_BUILD}/body"
 
-  $log "Create ${DIR_TEMP}"
-  mkdir -p "${DIR_TEMP}"
+  local -r FILE_CAT="${FILE_BODY_PREFIX}.md"
+  local -r FILE_TEX="${FILE_BODY_PREFIX}.tex"
+  local -r FILE_PDF="${FILE_BODY_PREFIX}.pdf"
+  local -r FILE_DST="$(basename "${ARG_FILE_OUTPUT}" .pdf).pdf"
 
-  $log "Concatenate files to ${FILE_SRC}"
-  cat ./??.md > ${FILE_SRC}
+  $log "Concatenate files into ${FILE_CAT}"
+  cat ./??.md > ${FILE_CAT}
 
   $log "Generate ${FILE_TEX}"
-  pandoc --standalone --to context ${FILE_SRC} > "${FILE_TEX}"
+  pandoc --standalone --to context ${FILE_CAT} > "${FILE_TEX}"
 
   $log "Generate ${FILE_PDF}"
-  context --nonstopmode --batchmode --purgeall ${FILE_TEX} >/dev/null 2>&1
+  context --nonstopmode --batchmode --purgeall --path=build,styles "${FILE_TEX}" >/dev/null 2>&1
 
   $log "Rename ${FILE_PDF} to ${FILE_DST}"
   mv "${FILE_PDF}" "${FILE_DST}"
-
-  $log "Remove ${DIR_TEMP}"
-  rm -rf "${DIR_TEMP}"
 }
 
 # Check for required commands.
@@ -165,6 +162,10 @@ parse_commandline() {
       ;;
       -h|-\?|--help)
         show_usage=util_show_usage
+      ;;
+      -f|--filename)
+        ARG_FILE_OUTPUT="$2"
+        consume=2
       ;;
       *)
         # Skip argument
