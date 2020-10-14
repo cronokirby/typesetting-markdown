@@ -1,43 +1,170 @@
 #!/usr/bin/env bash
 
-# Unset all the variables that we end up using
-unset ARG_HELP
-unset ARG_DEBUG
-unset REQUIRED_MISSING
+# Exit immediately on any error
+set -o errexit
+# Don't allow using variables that aren't set
+set -o nounset
 
 readonly SCRIPT_SRC="$(dirname "${BASH_SOURCE[0]}")"
-readonly SCRIPT_DIR="$(cd "SCRIPT_SRC" >/dev/null 2>&1 && pwd)"
+readonly SCRIPT_DIR="$(cd "${SCRIPT_SRC}" >/dev/null 2>&1 && pwd)"
 readonly SCRIPT_NAME=$(basename "$0")
 
-# Colors
-readonly COLOR_BLUE='\033[1;34m'
-readonly COLOR_PINK='\033[1;35m'
-readonly COLOR_DKGRAY='\033[30m'
-readonly COLOR_DKRED='\033[31m'
-readonly COLOR_YELLOW='\033[1;33m'
-readonly COLOR_OFF='\033[0m'
+# Entry point to our build script.
+#
+# $@ - All command-line arguments.
+main() {
+  parse_commandline "$@"
 
-# Specific color choices for logging
-readonly COLOR_LOGGING=${COLOR_BLUE}
-readonly COLOR_WARNING=${COLOR_YELLOW}
-readonly COLOR_ERROR=${COLOR_DKRED}
+  $show_usage && terminate 3
+  validate_requirements && terminate 4
 
-show_usage() {
-  printf "Usage: %s [Option...]\n" "${SCRIPT_NAME}" >&2
-  printf "  -d, --debug\t\tLog messages while processing\n" >&2
-  printf "  -h, --help\t\tShow this help message then exit\n" >&2
+  cd "${SCRIPT_DIR}" && execute_tasks && terminate 5
+
+  terminate 0
 }
 
+# Perform tasks to execute (empty by default).
+#
+# @return 0 - Failed to complete all tasks.
+execute_tasks() {
+  $log "Execute tasks"
+
+  local -r await=close_write,delete
+
+  $log "Await file modifications"
+  inotifywait -q -e "${await}" -m . | \
+  while read -r directory event filename; do
+
+    # Act on Markdown file events; ignore directory delete events.
+    if [[ "${filename,,}" == *\.*md && ! "${event}" == *ISDIR* ]]; then
+      $log "${directory}${filename} (${event})"
+
+      execute_build
+    fi
+  done
+
+  return 1
+}
+
+execute_build() {
+  local -r DIR_TEMP="$(mktemp tmp.XXXXXXXXXX -ut)"
+  local -r FILE_PREFIX="body"
+
+  local -r FILE_SRC="${DIR_TEMP}/${FILE_PREFIX}.md"
+  local -r FILE_TEX="${FILE_PREFIX}.tex"
+  local -r FILE_PDF="${FILE_PREFIX}.pdf"
+  local -r FILE_DST="output.pdf"
+
+  $log "Create ${DIR_TEMP}"
+  mkdir -p "${DIR_TEMP}"
+
+  $log "Concatenate files to ${FILE_SRC}"
+  cat ./??.md > ${FILE_SRC}
+
+  $log "Generate ${FILE_TEX}"
+  pandoc --standalone --to context ${FILE_SRC} > "${FILE_TEX}"
+
+  $log "Generate ${FILE_PDF}"
+  context --nonstopmode --batchmode --purgeall ${FILE_TEX} >/dev/null 2>&1
+
+  $log "Rename ${FILE_PDF} to ${FILE_DST}"
+  mv "${FILE_PDF}" "${FILE_DST}"
+
+  $log "Remove ${DIR_TEMP}"
+  rm -rf "${DIR_TEMP}"
+}
+
+# Check for required commands.
+#
+# @return 0 - At least one command is missing.
+# @return 1 - All commands are available.
+validate_requirements() {
+  $log "Check missing software requirements"
+
+  required context "https://wiki.contextgarden.net"
+  required pandoc "https://www.pandoc.org"
+  required gs "https://www.ghostscript.com"
+
+  return "${REQUIRED_MISSING}"
+}
+
+# Check for a required command.
+#
+# $1 - Command to execute.
+# $2 - Where to find the command's source code or binaries.
+required() {
+  if ! command -v "$1" > /dev/null 2>&1; then
+    warning "Missing requirement: install $1 ($2)"
+    REQUIRED_MISSING=0
+  fi
+}
+
+# Show acceptable command-line arguments.
+#
+# @return 0 - Indicate script may not continue.
+util_show_usage() {
+  printf "Usage: %s [OPTION...]\n" "${SCRIPT_NAME}" >&2
+  printf "  -d, --debug\t\tLog messages while processing\n" >&2
+  printf "  -h, --help\t\tShow this help message then exit\n" >&2
+
+  return 0
+}
+
+# Write coloured text to standard output.
+#
+# $1 - The text to write
+# $2 - The colour to write in
+colored_text() {
+  printf "%b%s%b\n" "$2" "$1" "${COLOR_OFF}"
+}
+
+# Write a warning message to standard output.
+#
+# $1 - The text to write
+warning() {
+  colored_text "$1" "${COLOR_WARNING}"
+}
+
+# Write an error message to standard output.
+#
+# $1 - The text to write
+error() {
+  colored_text "$1" "${COLOR_ERROR}"
+}
+
+# Write a timestamp and message to standard output.
+#
+# $1 - The text to write
+util_log() {
+  printf "[%s] " "$(date +%H:%I:%S.%4N)"
+  colored_text "$1" "${COLOR_LOGGING}"
+}
+
+# Perform no operations.
+#
+# return 1 - Indicate function succeeded.
+noop() {
+  return 1
+}
+
+# Exit the program with a given exit code.
+#
+# $1 - The exit code to use.
+terminate() {
+  exit "$1"
+}
+
+# Set global argument values.
 parse_commandline() {
   while [ "$#" -gt "0" ]; do
     local consume=1
 
     case "$1" in
       -d|--debug)
-        ARG_DEBUG="true"
-      ;;  
-      -h|--help)
-        ARG_HELP="true"
+        log=util_log
+      ;;
+      -h|-\?|--help)
+        show_usage=util_show_usage
       ;;
       *)
         # Skip argument
@@ -48,54 +175,27 @@ parse_commandline() {
   done
 }
 
-required() {
-  local missing=0
+# ANSI colour escape sequences.
+readonly COLOR_BLUE='\033[1;34m'
+readonly COLOR_PINK='\033[1;35m'
+readonly COLOR_DKGRAY='\033[30m'
+readonly COLOR_DKRED='\033[31m'
+readonly COLOR_YELLOW='\033[1;33m'
+readonly COLOR_OFF='\033[0m'
 
-  if ! command -v "$1" >/dev/null 2>&1; then
-    warning "Missing requirement: install $1 ($2)"
-    missing=1
-  fi
+# Colour definitions used by script.
+readonly COLOR_LOGGING=${COLOR_BLUE}
+readonly COLOR_WARNING=${COLOR_YELLOW}
+readonly COLOR_ERROR=${COLOR_DKRED}
 
-  REQUIRED_MISSING=$((REQUIRED_MISSING + missing))
-}
+# Set to 0 if any commands are missing.
+REQUIRED_MISSING=1
 
-validate_requirements() {
-  required context "https://wiki.contextgarden.next"
-  required pandoc "https://www.pandoc.org"
-  required gs "https://www.ghostscript.com"
-}
+# These functions may be set to util delegates while parsing arguments.
+show_usage=noop
+log=noop
 
-colored_text() {
-  printf "%b%s%b\n" "$2" "$1" "${COLOR_OFF}"
-}
-
-warning() {
-  colored_text "$1" "${COLOR_WARNING}"
-}
-
-log() {
-  if [ -n "${ARG_DEBUG}"]; then
-    printf "[%s] " "$(date +%H:%I%S.%4N)"
-    colored_text "$1" "${COLOR_LOGGING}"
-  fi
-}
-
-main() {
-  parse_commandline "$@"
-
-  if [ -n "${ARG_HELP}" ]; then
-    show_usage
-    exit 3
-  fi
-
-  log "Check for missing software requirements"
-  validate_requirements
-
-  if [ "${REQUIRED_MISSING}" -gt "0" ]; then
-    exit 4
-  fi
-
-  cd "${SCRIPT_DIR}" && execute_tasks
-}
-
+# Run the script, passing in all command-line arguments.
+#
+# Terminates with exit level 0 by default.
 main "$@"
