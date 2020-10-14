@@ -24,8 +24,8 @@ class ColoredFormatter(logging.Formatter):
     MESSAGE_FORMAT = '%(message)s'
 
     FORMATS = {
-        logging.INFO: f'{GRAY}{BOLD}{LEVEL_FORMAT}{RESET} {GRAY}{MESSAGE_FORMAT}{RESET}',
-        logging.DEBUG: f'{BLUE}{BOLD}{LEVEL_FORMAT}{RESET} {BLUE}{MESSAGE_FORMAT}{RESET}',
+        logging.INFO: f'{GRAY}{LEVEL_FORMAT}{RESET} {GRAY}{MESSAGE_FORMAT}{RESET}',
+        logging.DEBUG: f'{BLUE}{LEVEL_FORMAT}{RESET} {BLUE}{MESSAGE_FORMAT}{RESET}',
         logging.WARN: f'{YELLOW}{BOLD}{LEVEL_FORMAT}{RESET} {YELLOW}{MESSAGE_FORMAT}{RESET}',
         logging.CRITICAL: f'{YELLOW}{BOLD}{LEVEL_FORMAT}{RESET} {YELLOW}{MESSAGE_FORMAT}{RESET}',
         logging.ERROR: f'{RED}{BOLD}{LEVEL_FORMAT}{RESET} {RED}{MESSAGE_FORMAT}{RESET}',
@@ -37,9 +37,13 @@ class ColoredFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def setup_logger(verbose, no_color):
+def setup_logger(log_level, no_color):
     level = logging.WARN
-    if verbose:
+
+    declared = log_level.upper()
+    if declared == 'DEBUG':
+        level = logging.DEBUG
+    elif declared == 'INFO':
         level = logging.INFO
 
     ch = logging.StreamHandler()
@@ -68,12 +72,16 @@ def log_error(*args, **kwargs):
     get_logger().error(*args, **kwargs)
 
 
+def log_debug(*args, **kwargs):
+    get_logger().debug(*args, **kwargs)
+
+
 def parse_args():
     '''
     Parse the arguments we need for our script.
     '''
     parser = argparse.ArgumentParser(description='Do stuff')
-    parser.add_argument('-v', '--verbose', action='store_true',
+    parser.add_argument('-ll', '--log-level', type=str,
                         help='Log more information during execution')
     parser.add_argument('--no-color', action='store_true',
                         help='Do not use color when logging')
@@ -102,7 +110,7 @@ def main():
     '''
     args = parse_args()
 
-    setup_logger(args.verbose, args.no_color)
+    setup_logger(args.log_level, args.no_color)
 
     if not check_requirements():
         exit(-1)
@@ -110,6 +118,7 @@ def main():
     log_warn('Something bad has happened')
     log_error('Something even worse has happened')
     log_info('Program requirements satisfied!')
+    log_debug('Testing')
 
 
 if __name__ == '__main__':
