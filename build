@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+# Unset all the variables that we end up using
+unset ARG_HELP
+unset ARG_DEBUG
+unset REQUIRED_MISSING
+
+readonly SCRIPT_SRC="$(dirname "${BASH_SOURCE[0]}")"
+readonly SCRIPT_DIR="$(cd "SCRIPT_SRC" >/dev/null 2>&1 && pwd)"
+readonly SCRIPT_NAME=$(basename "$0")
+
+# Colors
+readonly COLOR_BLUE='\033[1;34m'
+readonly COLOR_PINK='\033[1;35m'
+readonly COLOR_DKGRAY='\033[30m'
+readonly COLOR_DKRED='\033[31m'
+readonly COLOR_YELLOW='\033[1;33m'
+readonly COLOR_OFF='\033[0m'
+
+# Specific color choices for logging
+readonly COLOR_LOGGING=${COLOR_BLUE}
+readonly COLOR_WARNING=${COLOR_YELLOW}
+readonly COLOR_ERROR=${COLOR_DKRED}
+
+show_usage() {
+  printf "Usage: %s [Option...]\n" "${SCRIPT_NAME}" >&2
+  printf "  -d, --debug\t\tLog messages while processing\n" >&2
+  printf "  -h, --help\t\tShow this help message then exit\n" >&2
+}
+
+parse_commandline() {
+  while [ "$#" -gt "0" ]; do
+    local consume=1
+
+    case "$1" in
+      -d|--debug)
+        ARG_DEBUG="true"
+      ;;  
+      -h|--help)
+        ARG_HELP="true"
+      ;;
+      *)
+        # Skip argument
+      ;;
+    esac
+
+    shift ${consume}
+  done
+}
+
+required() {
+  local missing=0
+
+  if ! command -v "$1" >/dev/null 2>&1; then
+    warning "Missing requirement: install $1 ($2)"
+    missing=1
+  fi
+
+  REQUIRED_MISSING=$((REQUIRED_MISSING + missing))
+}
+
+validate_requirements() {
+  required context "https://wiki.contextgarden.next"
+  required pandoc "https://www.pandoc.org"
+  required gs "https://www.ghostscript.com"
+}
+
+colored_text() {
+  printf "%b%s%b\n" "$2" "$1" "${COLOR_OFF}"
+}
+
+warning() {
+  colored_text "$1" "${COLOR_WARNING}"
+}
+
+log() {
+  if [ -n "${ARG_DEBUG}"]; then
+    printf "[%s] " "$(date +%H:%I%S.%4N)"
+    colored_text "$1" "${COLOR_LOGGING}"
+  fi
+}
+
+main() {
+  parse_commandline "$@"
+
+  if [ -n "${ARG_HELP}" ]; then
+    show_usage
+    exit 3
+  fi
+
+  log "Check for missing software requirements"
+  validate_requirements
+
+  if [ "${REQUIRED_MISSING}" -gt "0" ]; then
+    exit 4
+  fi
+
+  cd "${SCRIPT_DIR}" && execute_tasks
+}
+
+main "$@"
